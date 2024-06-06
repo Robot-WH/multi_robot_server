@@ -1,19 +1,15 @@
+#include "robot_server/server.hpp"
+#include "proto/obs.pb.h"
+#include "robot_server/ipc/DataDispatcher.hpp"
+#include <netdb.h>
+#include <ifaddrs.h>
+#include <cstring>
 #include <thread>
-#include "select_server.hpp"
-#include "ipc/DataDispatcher.hpp"
 namespace Comm {
-
-SelectServer::SelectServer() {
-  std::cout << "创建基于select 多路IO复用的服务器" << "\n";  
+  Server::Server() {
 }
 
-/**
- * @brief 
- * 
- * @return true 
- * @return false 
- */
-bool SelectServer::Open() {
+bool Server::Open() {
   // 创建通信的套接字
   // int fd：
   //     这是一个整数类型的变量，名为fd。在套接字编程中，fd（通常称为文件描述符）是一个非负整数，用于唯一标识一个套接字。所有的套接字操作，如发送、接收、关闭等，都会使用这个fd。
@@ -76,63 +72,19 @@ bool SelectServer::Open() {
     perror("listen failed");
     return -1;
   }
-  // 创建工作线程
-  std::thread working_thread(&SelectServer::working, this);
-  working_thread.detach();
+  // 创建监听线程
+  std::thread connect_thread(&Server::multiThreadConnectClient, this);
+  connect_thread.detach();
   return 1;
 }
 
 /**
- * @brief 
- * 
- */
-void SelectServer::working() {
-  fd_set redset; 
-  FD_ZERO(&redset);   
-  FD_SET(fd_, &redset);   // 监听描述符置位
-  int maxfd = fd_;  
-  while (1) {
-    fd_set tmp = redset;
-    int ret = select(maxfd + 1, &tmp, NULL, NULL, NULL);
-    // 检测监听描述符是否设为1   
-    if (FD_ISSET(fd_, &tmp)) {
-      // 说明有连接请求
-      int cfd = connectClient(); 
-      FD_SET(cfd, &redset);   // 设置到文件描述符列表  这样下次就会检查它的接收状态 
-      maxfd = cfd > maxfd ? cfd : maxfd;
-    }
-    // 检查通信的描述符  
-    for (int i = 0; i <= maxfd; ++i) {
-      if (i != fd_ && FD_ISSET(i, &tmp)) {
-        // 说明有客户端发送数据过来
-        int len = clientComm(i);
-        if (len == -1) {
-        } else if (len == 0) {
-          FD_CLR(i, &redset);
-          close(i);  
-          uint32_t s_addr = fd_ip_map_[i];
-          // 由于断开连接了，所以把这个客户端信息删除 
-          if (client_info_.find(s_addr) != client_info_.end()) {
-            std::cout << "删除文件描述符，ip: " << client_info_[s_addr].ip_address << "\n";
-            client_info_.erase(s_addr);
-          } else {
-            std::cout << "无法删除文件描述符，ip: " << client_info_[s_addr].ip_address << "\n";
-          }
-          fd_ip_map_.erase(i);
-        }
-      }
-    }
-  }
-}
-
-/**
- * @brief SelectServer::Send
+ * @brief Server::Send
  * @param message_type
  * @param robot_label
  * @param data
  */
-void SelectServer::Send(const std::string& robot_label, const uint8_t& message_type, 
-    const std::string& msg) {
+void Server::Send(const std::string& robot_label, const uint8_t& message_type, const std::string& msg) {
   // 获取当前通信的机器人的文件描述符
   uint32_t s_addr;
   inet_pton(AF_INET, robot_label.c_str(), &s_addr);
@@ -140,7 +92,6 @@ void SelectServer::Send(const std::string& robot_label, const uint8_t& message_t
       return;
   }
   const SockInfo& client_info = client_info_[s_addr];
-  // 防止粘包  
   // 首先发送消息的头信息
   MessageInfo msg_info;
   msg_info.message_type = message_type;
@@ -153,61 +104,86 @@ void SelectServer::Send(const std::string& robot_label, const uint8_t& message_t
 }
 
 /**
- * @brief 
- * 
- * @return int 
+ * @brief Server::get_ip
+ * @return
  */
-int SelectServer::connectClient() {
-  struct sockaddr_in client_addr;
-  int addrlen = sizeof(client_addr);
-  // 连接后，client的ip地址等信息会记录在client_addr中
-  int cfd = accept(fd_, (struct sockaddr *)&client_addr, (socklen_t*)&addrlen);
-  if (cfd == -1) {
-    perror("accept");
-    return -1;
-  }
-  SockInfo info;
-  info.fd = cfd;
-  // 该连接对应的ip
-  inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, info.ip_address, sizeof(info.ip_address));
-  client_info_[client_addr.sin_addr.s_addr] = info;
-  fd_ip_map_[cfd] = client_addr.sin_addr.s_addr;  
-  std::string ip_address = info.ip_address;
-  ipc::DataDispatcher::GetInstance().Publish("ConnectMsg", ip_address);
-  return cfd; 
+std::string Server::get_ip() {
+  char ip[32];
+  inet_ntop(AF_INET, &address_.sin_addr.s_addr, ip, sizeof(ip));
+  return std::string(ip);
 }
 
 /**
- * @brief 
- * 
- * @param fd 
+ * @brief Server::ConnectClientMultiThread
  */
-int SelectServer::clientComm(int fd) {
-  ClientMsgPacket msg_packet;
-  msg_packet.addr_n = fd_ip_map_[fd];
-  // 先接收序列化数据信息
-  MessageInfo info;
-  int len = recv(fd, &info, sizeof(info), 0);
-  if (len <= 0) {
-    return -1;
+void Server::multiThreadConnectClient() {
+  struct sockaddr_in client_addr;
+  int addrlen = sizeof(client_addr);
+  while (1) {
+    // 阻塞等待客户端连接
+    // 连接后，client的ip地址等信息会记录在client_addr中
+    int cfd = accept(fd_, (struct sockaddr *)&client_addr, (socklen_t*)&addrlen);
+    if (cfd == -1) {
+      perror("accept");
+      continue;
+    }
+    SockInfo info;
+    info.fd = cfd;
+    // 向外界通知产生了新连接
+    inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, info.ip_address, sizeof(info.ip_address));
+    client_info_[client_addr.sin_addr.s_addr] = info;
+    std::string ip_address = info.ip_address;
+    ipc::DataDispatcher::GetInstance().Publish("ConnectMsg", ip_address);
+    // 创建通信线程
+    std::thread comm_thread(&Server::multiThreadComm, this, &info);
+    comm_thread.detach();
   }
-  msg_packet.message_type = info.message_type;
-  // 根据长度接收protobuf数据
-  msg_packet.received_message.resize(info.message_len);
+  close(fd_);
+}
 
-  ssize_t bytes_received = 0;
-  while (bytes_received < info.message_len) {
-      ssize_t bytes = recv(fd, msg_packet.received_message.data() + bytes_received,
-                                              info.message_len - bytes_received, 0);
-      if (bytes <= 0) {
-          // 处理错误或连接关闭的情况
-          break;
-      }
-      bytes_received += bytes;
+/**
+ * @brief Server::multiThreadComm
+ * @param arg
+ * @return
+ */
+void Server::multiThreadComm(void* arg) {
+  SockInfo* pInfo = (SockInfo*)arg;
+  std::cout << "客户端通信，ip：" << pInfo->ip_address << "\n";
+
+  while (1) {
+    // 先接收序列化数据信息
+    MessageInfo info;
+    int len = recv(pInfo->fd, &info, sizeof(info), 0);
+    if (len <= 0) {
+      continue;
+    }
+    // 根据长度接收protobuf数据
+    std::string received_message;
+    received_message.resize(info.message_len);
+
+    ssize_t bytes_received = 0;
+    while (bytes_received < info.message_len) {
+        ssize_t bytes = recv(pInfo->fd, received_message.data() + bytes_received,
+                                                info.message_len - bytes_received, 0);
+        if (bytes <= 0) {
+            // 处理错误或连接关闭的情况
+            break;
+        }
+        bytes_received += bytes;
+    }
+    // 读取到发送过来的数据received_message后，接着需要把它放入任务处理队列中异步处理
+    // 最好采用线程池的方式
+    ipc::DataDispatcher::GetInstance().Publish("ClientMsg", std::make_pair(info.message_type, received_message));
   }
-  // 读取到发送过来的数据received_message后，接着需要把它放入任务处理队列中异步处理
-  // 最好采用线程池的方式
-  ipc::DataDispatcher::GetInstance().Publish("ClientMsg", msg_packet);
-  return len;  
+  close(pInfo->fd);
+  uint32_t s_addr;
+  inet_pton(AF_INET, pInfo->ip_address, &s_addr);
+  if (client_info_.find(s_addr) != client_info_.end()) {
+    std::cout << "删除文件描述符，ip: " << pInfo->ip_address << "\n";
+    client_info_.erase(s_addr);
+  } else {
+    std::cout << "无法删除文件描述符，ip: " << pInfo->ip_address << "\n";
+  }
+  return;
 }
 }

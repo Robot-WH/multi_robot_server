@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(comm)
+project(robot_server)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,13 +16,15 @@ find_package(Protobuf REQUIRED)
 ###########
 ## Build ##
 ###########
-
+include_directories(
+    ./include
+)
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 add_library(server_lib
-    server/server.cpp
-    server/select_server.cpp
+    src/server.cpp
+    src/select_server.cpp
     proto/pose.pb.cc
     proto/obs.pb.cc
     proto/control_cmd.pb.cc
