@@ -24,10 +24,6 @@ public:
     return s_addr;
   }
 protected:
-  struct SockInfo {
-    char ip_address[32];
-    int fd = -1;
-  };
   std::unordered_map<in_addr_t, SockInfo> client_info_;  // <ip, info>
   int fd_;
   struct sockaddr_in address_;

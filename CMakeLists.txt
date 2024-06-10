@@ -35,8 +35,7 @@ target_include_directories(server_lib PUBLIC
     ${PROTOBUF_INCLUDE_DIRS}
 )
 
-
-  #############
-  ## INSTALL ##
-  #############
+#############
+## INSTALL ##
+#############
 

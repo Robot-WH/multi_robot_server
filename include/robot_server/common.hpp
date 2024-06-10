@@ -14,3 +14,8 @@ struct ClientMsgPacket {
   uint8_t message_type;    // 消息类型
   std::string received_message;
 };
+
+struct SockInfo {
+  char ip_address[32];
+  int fd = -1;
+};

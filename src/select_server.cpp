@@ -4,7 +4,7 @@
 namespace Comm {
 
 SelectServer::SelectServer() {
-  std::cout << "创建基于select 多路IO复用的服务器" << "\n";  
+  std::cout << "创建基于select 多路IO复用的服务器------------------" << "\n";  
 }
 
 /**
@@ -94,6 +94,7 @@ void SelectServer::working() {
   while (1) {
     fd_set tmp = redset;
     int ret = select(maxfd + 1, &tmp, NULL, NULL, NULL);
+    std::cout << "change" << "\n";
     // 检测监听描述符是否设为1   
     if (FD_ISSET(fd_, &tmp)) {
       // 说明有连接请求
@@ -106,8 +107,9 @@ void SelectServer::working() {
       if (i != fd_ && FD_ISSET(i, &tmp)) {
         // 说明有客户端发送数据过来
         int len = clientComm(i);
-        if (len == -1) {
-        } else if (len == 0) {
+
+        if (len <= 0) {
+          std::cout << " 断开连接 " << "\n";
           FD_CLR(i, &redset);
           close(i);  
           uint32_t s_addr = fd_ip_map_[i];
@@ -119,6 +121,7 @@ void SelectServer::working() {
             std::cout << "无法删除文件描述符，ip: " << client_info_[s_addr].ip_address << "\n";
           }
           fd_ip_map_.erase(i);
+          ipc::DataDispatcher::GetInstance().Publish("DisconnectMsg", i);
         }
       }
     }
@@ -172,8 +175,7 @@ int SelectServer::connectClient() {
   inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, info.ip_address, sizeof(info.ip_address));
   client_info_[client_addr.sin_addr.s_addr] = info;
   fd_ip_map_[cfd] = client_addr.sin_addr.s_addr;  
-  std::string ip_address = info.ip_address;
-  ipc::DataDispatcher::GetInstance().Publish("ConnectMsg", ip_address);
+  ipc::DataDispatcher::GetInstance().Publish("ConnectMsg", info);
   return cfd; 
 }
 
