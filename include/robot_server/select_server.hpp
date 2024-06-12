@@ -20,6 +20,7 @@ private:
   fd_set client_fs_;
   int maxfd_;
   std::mutex fs_mt_;
+  std::mutex read_mt_;
   std::shared_mutex map_mt_;
   MultipleThreadPool thread_pool_;
 };

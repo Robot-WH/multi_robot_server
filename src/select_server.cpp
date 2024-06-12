@@ -5,8 +5,8 @@
 
 namespace Comm {
 
-SelectServer::SelectServer() : thread_pool_(4) {
-  std::cout << "创建基于select 多路IO复用的服务器------------------5" << "\n";
+SelectServer::SelectServer() : thread_pool_(1) {
+  std::cout << "创建基于select 多路IO复用的服务器------------------1" << "\n";
   FD_ZERO(&client_fs_);
   maxfd_ = 0;
 }
@@ -130,11 +130,14 @@ void SelectServer::readThread() {
       if (FD_ISSET(i, &tmp)) {
         // std::cout << "read i: " << i << "\n";
         // 说明有客户端发送数据过来
-        // int len = clientComm(i);
-        clientComm(i);
-
-        // if (len <= 0) {
-        // }
+        // thread_pool_.submit(&SelectServer::clientComm, this, i);
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        std::function<void()> func = std::bind(&SelectServer::clientComm, this, i);
+        func();
+        // thread_pool_.submit(this, i);
+        // TicToc tt;
+        // clientComm(i);
+        // tt.toc("clientComm ");
       }
     }
   }
@@ -202,14 +205,18 @@ int SelectServer::connectClient() {
  * @param fd 
  */
 void SelectServer::clientComm(int fd) {
+  std::lock_guard<std::mutex> lock(read_mt_);
+  TicToc tt;
   ClientMsgPacket msg_packet;
-  {
-    std::shared_lock<std::shared_mutex> lock(map_mt_);
-    msg_packet.addr_n = fd_ip_map_[fd];
-  }
+  map_mt_.lock_shared();
+  msg_packet.addr_n = fd_ip_map_[fd];
+  map_mt_.unlock_shared();
+  tt.toc("lock ");
+  tt.tic();
   // 先接收序列化数据信息
   MessageInfo info;
   int len = recv(fd, &info, sizeof(info), 0);
+  tt.toc("recv ");
   if (len <= 0) {
     std::cout << " 断开连接 " << "\n";
     fs_mt_.lock();
@@ -234,7 +241,7 @@ void SelectServer::clientComm(int fd) {
   msg_packet.message_type = info.message_type;
   // 根据长度接收protobuf数据
   msg_packet.received_message.resize(info.message_len);
-
+  tt.tic();
   ssize_t bytes_received = 0;
   while (bytes_received < info.message_len) {
       ssize_t bytes = recv(fd, msg_packet.received_message.data() + bytes_received,
@@ -245,9 +252,11 @@ void SelectServer::clientComm(int fd) {
       }
       bytes_received += bytes;
   }
+  tt.toc("data ");
+  tt.tic();
   // 读取到发送过来的数据received_message后，接着需要把它放入任务处理队列中异步处理
-  // 最好采用线程池的方式
   ipc::DataDispatcher::GetInstance().Publish("ClientMsg", msg_packet);
+  tt.toc("publish ");
   return;
 }
 }
