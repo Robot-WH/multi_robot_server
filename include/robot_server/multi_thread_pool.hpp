@@ -49,7 +49,6 @@ public:
         cond_.wait(lock, [&]() {
             return !queue_.empty() || stop_; 
         });
-        std::cout << "queue not empty" << "\n";
         // 如果stop_ = true 那么退出
         if (queue_.empty()) {
             return false;
@@ -143,44 +142,42 @@ public:
      * @param args
      * @return
      */
-    // template<typename _F, typename _Ctype, typename... _Args,
-    //           typename ReturnType = std::invoke_result_t<_F, _Ctype*, _Args...>>
-    // auto submit(_F&& f, _Ctype* class_addr, _Args&&... args) -> std::future<ReturnType> {    // 尾返回
-    //     std::function<ReturnType()> func = std::bind(std::forward<_F>(f), class_addr, std::forward<_Args>(args)...);
-    //     /**
-    //      * @todo 将task_ptr 该为非指针
-    //      */
-    //     auto task_ptr = std::make_shared<std::packaged_task<ReturnType()>>(func); // packaged_task封装func用于异步调用
-    //     // function 对 lamda表达时进行包装
-    //     WorkItem warpper_func = [task_ptr]() {
-    //         (*task_ptr)();
-    //     };
-    //     size_t id = rand() % threads_.size();
-    //     std::cout << "放入任务队列id: " << id << "\n";
-    //     task_queue_[id].push(std::move(warpper_func));   // 随机压入到一个任务队列中
-    //     std::cout << "任务数量： " << task_queue_[id].size() << "\n";
-    //     return task_ptr->get_future();  // 这个future绑定了func 的返回值  通过 .get() 可以获取该返回值
-    // }
-
-    template<typename _Ctype, typename... _Param, typename... _Args>
-    auto submit(void (_Ctype::*callback)(_Param...), _Ctype* class_addr, _Args&&... args) {    // 尾返回
-    // template<typename _Ctype, typename... _Param, typename... _Args>
-    // auto submit(void (_Ctype::*callback)(_Param...), _Ctype* class_addr, _Args&&... args) {
-    std::function<void()> func = std::bind(callback, class_addr, std::forward<_Args>(args)...);
+    template<typename _F, typename _Ctype, typename... _Args,
+              typename ReturnType = std::invoke_result_t<_F, _Ctype*, _Args...>>
+    auto submit(_F&& f, _Ctype* class_addr, _Args&&... args) -> std::future<ReturnType> {    // 尾返回
+        std::function<ReturnType()> func = std::bind(std::forward<_F>(f), class_addr, std::forward<_Args>(args)...);
         /**
          * @todo 将task_ptr 该为非指针
          */
-        // auto task_ptr = std::make_shared<std::packaged_task<void()>>(func); // packaged_task封装func用于异步调用
+        auto task_ptr = std::make_shared<std::packaged_task<ReturnType()>>(func); // packaged_task封装func用于异步调用
         // function 对 lamda表达时进行包装
-        // WorkItem warpper_func = [task_ptr]() {
-        //     (*task_ptr)();
-        // };
+        WorkItem warpper_func = [task_ptr]() {
+            (*task_ptr)();
+        };
         size_t id = rand() % threads_.size();
         // std::cout << "放入任务队列id: " << id << "\n";
-        task_queue_[id].push(std::move(func));   // 随机压入到一个任务队列中
+        task_queue_[id].push(std::move(warpper_func));   // 随机压入到一个任务队列中
         // std::cout << "任务数量： " << task_queue_[id].size() << "\n";
-        return;
+        return task_ptr->get_future();  // 这个future绑定了func 的返回值  通过 .get() 可以获取该返回值
     }
+
+    // template<typename _Ctype, typename... _Param, typename... _Args>
+    // auto submit(void (_Ctype::*callback)(_Param...), _Ctype* class_addr, _Args&&... args) {    // 尾返回
+    // std::function<void()> func = std::bind(callback, class_addr, std::forward<_Args>(args)...);
+    //     /**
+    //      * @todo 将task_ptr 该为非指针
+    //      */
+    //     // auto task_ptr = std::make_shared<std::packaged_task<void()>>(func); // packaged_task封装func用于异步调用
+    //     // function 对 lamda表达时进行包装
+    //     // WorkItem warpper_func = [task_ptr]() {
+    //     //     (*task_ptr)();
+    //     // };
+    //     size_t id = rand() % threads_.size();
+    //     std::cout << "放入任务队列id: " << id << "\n";
+    //     task_queue_[id].push(std::move(func));   // 随机压入到一个任务队列中
+    //     std::cout << "任务数量： " << task_queue_[id].size() << "\n";
+    //     return;
+    // }
 
 private:
     bool shutdown_; 
