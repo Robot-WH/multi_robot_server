@@ -157,7 +157,7 @@ public:
         size_t id = rand() % threads_.size();
         // std::cout << "放入任务队列id: " << id << "\n";
         task_queue_[id].push(std::move(warpper_func));   // 随机压入到一个任务队列中
-        // std::cout << "任务数量： " << task_queue_[id].size() << "\n";
+        std::cout << "任务数量： " << task_queue_[id].size() << "\n";
         return task_ptr->get_future();  // 这个future绑定了func 的返回值  通过 .get() 可以获取该返回值
     }
 

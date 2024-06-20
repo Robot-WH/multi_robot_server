@@ -2,7 +2,6 @@
 #include <sys/time.h>
 #include "robot_server/select_server.hpp"
 #include "robot_server/ipc/DataDispatcher.hpp"
-
 namespace Comm {
 
 SelectServer::SelectServer() : thread_pool_(4) {
@@ -106,6 +105,7 @@ void SelectServer::connectThread() {
       fs_mt_.lock();
       FD_SET(cfd, &client_fs_);   // 设置到文件描述符列表  这样下次就会检查它的接收状态
       maxfd_ = cfd > maxfd_ ? cfd : maxfd_;
+      read_status_table_[cfd] = false;  
       fs_mt_.unlock();
     }
   }
@@ -128,18 +128,19 @@ void SelectServer::readThread() {
     // 检查通信的描述符
     for (int i = 0; i <= maxfd; ++i) {
       if (FD_ISSET(i, &tmp)) {
-        // std::cout << "read i: " << i << "\n";
-        // 说明有客户端发送数据过来
-        thread_pool_.submit(&SelectServer::clientComm, this, i);
-        // std::function<void()> func = std::bind(&SelectServer::clientComm, this, i);
-        // func();
-        // thread_pool_.submit(this, i);
-        // TicToc tt;
-        // clientComm(i);
-        // tt.toc("clientComm ");
+        fs_mt_.lock();
+        if (!read_status_table_[i]) {
+          // std::cout << "read i: " << i << "\n";
+          read_status_table_[i] = 1;  
+          fs_mt_.unlock();
+          // 说明有客户端发送数据过来
+          // 将读取任务交给线程池处理
+          thread_pool_.submit(&SelectServer::clientComm, this, i);
+        }
+        fs_mt_.unlock();
       }
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    // std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 }
 
@@ -205,7 +206,6 @@ int SelectServer::connectClient() {
  * @param fd 
  */
 void SelectServer::clientComm(int fd) {
-  std::lock_guard<std::mutex> lock(read_mt_);
   TicToc tt;
   ClientMsgPacket msg_packet;
   map_mt_.lock_shared();
@@ -217,6 +217,7 @@ void SelectServer::clientComm(int fd) {
   MessageInfo info;
   int len = recv(fd, &info, sizeof(info), 0);
   // tt.toc("recv ");
+  // 读端关闭  len = 0
   if (len <= 0) {
     std::cout << " 断开连接 " << "\n";
     fs_mt_.lock();
@@ -236,6 +237,9 @@ void SelectServer::clientComm(int fd) {
       fd_ip_map_.erase(fd);
     }
     ipc::DataDispatcher::GetInstance().Publish("DisconnectMsg", fd);
+    fs_mt_.lock();
+    read_status_table_[fd] = 0;  
+    fs_mt_.unlock();
     return;
   }
   msg_packet.message_type = info.message_type;
@@ -258,6 +262,9 @@ void SelectServer::clientComm(int fd) {
   ipc::DataDispatcher::GetInstance().Publish("ClientMsg", msg_packet);
   // tt.toc("publish ");
    tt.toc("clientComm ");
+  fs_mt_.lock();
+  read_status_table_[fd] = 0;  
+  fs_mt_.unlock();
   return;
 }
 }

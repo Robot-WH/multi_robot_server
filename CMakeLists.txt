@@ -28,6 +28,7 @@ add_library(server_lib
     proto/pose.pb.cc
     proto/obs.pb.cc
     proto/control_cmd.pb.cc
+    proto/orbit_network.pb.cc
 )
 
 target_link_libraries(server_lib ${Protobuf_LIBRARIES})
