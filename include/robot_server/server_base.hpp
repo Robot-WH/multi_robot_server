@@ -11,7 +11,7 @@ class ServerBase {
 public:
   ServerBase() {};
   virtual bool Open() = 0;
-  virtual void Send(const std::string& robot_label, const uint8_t& message_type, 
+  virtual void TcpSend(const std::string& robot_label, const uint8_t& message_type, 
     const std::string& data) = 0;
   std::string get_ip() {
     char ip[32];

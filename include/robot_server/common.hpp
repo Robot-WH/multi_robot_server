@@ -23,7 +23,6 @@ struct SockInfo {
   int fd = -1;
 };
 
-
 class TicToc {
   public:
     TicToc() {

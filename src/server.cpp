@@ -6,9 +6,11 @@
 #include <cstring>
 #include <thread>
 namespace Comm {
-  Server::Server() {
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+Server::Server() {
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 bool Server::Open() {
   // 创建通信的套接字
   // int fd：
@@ -78,13 +80,9 @@ bool Server::Open() {
   return 1;
 }
 
-/**
- * @brief Server::Send
- * @param message_type
- * @param robot_label
- * @param data
- */
-void Server::Send(const std::string& robot_label, const uint8_t& message_type, const std::string& msg) {
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+void Server::Send(const std::string& robot_label, const uint8_t& message_type, 
+                                        const std::string& msg) {
   // 获取当前通信的机器人的文件描述符
   uint32_t s_addr;
   inet_pton(AF_INET, robot_label.c_str(), &s_addr);
@@ -103,19 +101,14 @@ void Server::Send(const std::string& robot_label, const uint8_t& message_type, c
   return;
 }
 
-/**
- * @brief Server::get_ip
- * @return
- */
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 std::string Server::get_ip() {
   char ip[32];
   inet_ntop(AF_INET, &address_.sin_addr.s_addr, ip, sizeof(ip));
   return std::string(ip);
 }
 
-/**
- * @brief Server::ConnectClientMultiThread
- */
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 void Server::multiThreadConnectClient() {
   struct sockaddr_in client_addr;
   int addrlen = sizeof(client_addr);
@@ -141,11 +134,7 @@ void Server::multiThreadConnectClient() {
   close(fd_);
 }
 
-/**
- * @brief Server::multiThreadComm
- * @param arg
- * @return
- */
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 void Server::multiThreadComm(void* arg) {
   SockInfo* pInfo = (SockInfo*)arg;
   std::cout << "客户端通信，ip：" << pInfo->ip_address << "\n";
