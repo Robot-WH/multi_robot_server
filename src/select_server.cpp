@@ -204,7 +204,7 @@ int SelectServer::connectClient() {
   struct sockaddr_in client_addr;
   int addrlen = sizeof(client_addr);
   // 连接后，client的ip地址等信息会记录在client_addr中
-  // 创建一个通信套接字
+  // 创建一个通信套接字，通信套接字是继承了监听套接字的“监听位置”（即IP地址和端口号）
   int cfd = accept(fd_, (struct sockaddr *)&client_addr, (socklen_t*)&addrlen);
   if (cfd == -1) {
     perror("accept");
@@ -218,6 +218,7 @@ int SelectServer::connectClient() {
     std::unique_lock<std::shared_mutex> lock(map_mt_);
     client_info_[client_addr.sin_addr.s_addr] = info;
     fd_ip_map_[cfd] = client_addr.sin_addr.s_addr;
+    std::cout << "连接，nip: " << fd_ip_map_[cfd] << "\n";
   }
   ipc::DataDispatcher::GetInstance().Publish("ConnectMsg", info);
   return cfd; 
@@ -294,10 +295,12 @@ void SelectServer::udpComm() {
   msg_packet.message_type = 3; 
   msg_packet.received_message.resize(50000);
 
-  socklen_t len = sizeof(address_);
+  struct sockaddr_in address;
+  socklen_t len = sizeof(address);
   // 用udp通信套接字接收最大50000长度的信息
   int n = recvfrom(udp_fd_, msg_packet.received_message.data(), 50000, 
-    0, (struct sockaddr *)&address_, &len);
+    0, (struct sockaddr *)&address, &len);
+  msg_packet.addr_n = address.sin_addr.s_addr; 
   msg_packet.received_message.resize(n);
   // std::cout << "UDP接收到：" << n << "\n";  
   // std::cout << "udp 接收到：" << msg_packet.received_message.size() << "\n";  
