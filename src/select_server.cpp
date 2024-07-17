@@ -143,31 +143,26 @@ void SelectServer::readThread() {
     // 检查通信的描述符
     for (int i = 0; i <= maxfd; ++i) {
       if (FD_ISSET(i, &tmp)) {
+         std::lock_guard<std::mutex> lock(fs_mt_); // 使用 lock_guard 自动管理锁  
         // tcp套接字通信
         if (i != udp_fd_) {
-          fs_mt_.lock();
           if (!read_status_table_[i]) {
             // std::cout << "read i: " << i << "\n";
             read_status_table_[i] = 1;  
-            fs_mt_.unlock();
             // 说明有客户端发送数据过来
             // 将读取任务交给线程池处理
             thread_pool_.submit(&SelectServer::clientComm, this, i);
           }
-          fs_mt_.unlock();
         } else {
           // UDP通信
           // std::cout << "接收到UDP信息" << "\n";  
-          fs_mt_.lock();
           if (!read_status_table_[udp_fd_]) {
             // std::cout << "read i: " << i << "\n";
             read_status_table_[udp_fd_] = 1;  
-            fs_mt_.unlock();
             // 说明有客户端发送数据过来
             // 将读取任务交给线程池处理
             thread_pool_.submit(&SelectServer::udpComm, this);
           }
-          fs_mt_.unlock();
         }
       }
     }
@@ -181,6 +176,13 @@ void SelectServer::TcpSend(const std::string& robot_label, const uint8_t& messag
   // 获取当前通信的机器人的文件描述符
   uint32_t s_addr;
   inet_pton(AF_INET, robot_label.c_str(), &s_addr);
+  TcpSend(s_addr, message_type, msg);
+  return;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+void SelectServer::TcpSend(const uint32_t& s_addr, const uint8_t& message_type, 
+                                                      const std::string& msg) {
   map_mt_.lock_shared();
   if (client_info_.find(s_addr) == client_info_.end()) {
       return;

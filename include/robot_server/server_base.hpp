@@ -13,6 +13,8 @@ public:
   virtual bool Open() = 0;
   virtual void TcpSend(const std::string& robot_label, const uint8_t& message_type, 
     const std::string& data) = 0;
+  virtual void TcpSend(const uint32_t& s_addr, const uint8_t& message_type, 
+                                                      const std::string& msg) =0;
   std::string get_ip() {
     char ip[32];
     inet_ntop(AF_INET, &address_.sin_addr.s_addr, ip, sizeof(ip));

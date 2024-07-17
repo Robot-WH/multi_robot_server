@@ -29,6 +29,9 @@ public:
   void TcpSend(const std::string& robot_label, const uint8_t& message_type, 
                             const std::string& data) override ;
 
+  void TcpSend(const uint32_t& s_addr, const uint8_t& message_type, 
+                                                      const std::string& msg) override;
+
 protected:
   /**
    * @brief 
